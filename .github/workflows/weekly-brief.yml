@@ -1,26 +1,18 @@
 name: Generate Weekly Brief
 on:
- schedule:
-  - cron: '0 21 * * 0'
- workflow_dispatch:
+  schedule:
+    - cron: '0 21 * * 0'
+  workflow_dispatch:
 jobs:
- generate:
- runs-on: ubuntu-latest
- steps:
-  - uses: actions/checkout@v4
-  - uses: actions/setup-python@v5
-    with:
-     python-version: '3.11'
-  - run: pip install anthropic
-  - run: python scripts/generate_brief.py
-  env:
-   ANTHROPIC_API_KEY: $ 
-{{ secrets.ANTHROPIC_API_KEY }}
-  - run: |
-     git config user.name "Impactvest Bot"
-     git config user.email 
-"bot@impactvest.com"
-     git add data/
-     git diff --staged --quiet || git commit -m 
-     "Weekly brief $(date -u +%Y-%m-%d)"
-         git push
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install anthropic
+      - run: python scripts/generate_brief.py
+        env:
+          ANTHROPIC_API_KEY: $ {{ secrets.ANTHROPIC_API_KEY }}
+      - run: git config user.name "Bot" && git config user.email "bot@test.com" && git add data/ && git diff --staged --quiet || git commit -m "brief" && git push
