@@ -7,20 +7,15 @@ jobs:
 generate:
 runs-on: ubuntu-latest
 steps:
-- name: Checkout repo
-        uses: actions/checkout@v4
-- name: Set up Python
-uses: actions/setup-python@v5
+- uses: actions/checkout@v4
+- uses: actions/setup-python@v5
 with:
 python-version: '3.11'
-- name: Install dependencies
-run: pip install anthropic
-- name: Generate brief
+- run: pip install anthropic
+- run: python scripts/generate_brief.py
 env:
 ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-run: python scripts/generate_brief.py
-- name: Commit and push
-run: |
+- run: |
 git config user.name "Impactvest Bot"
 git config user.email "bot@impactvest.com"
 git add data/
