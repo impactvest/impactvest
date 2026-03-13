@@ -1,91 +1,30 @@
-"""
-generate_brief.py
-Calls the Anthropic API with web search, generates this week's
-Impactvest Brief as JSON, and writes it to data/.
-"""
-import anthropic
-import json
-import os
-import re
-from datetime import datetime, timezone
-# ── CONFIG ──────────────────────────────────────────────────────────────────
-TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-WEEK_LABEL = datetime.now(timezone.utc).strftime("%-d %B %Y")
-PROMPT = f"""You are the editor of "Impactvest Brief", a weekly sustainable investment \
-newsletter for professional institutional investors (Australian superannuation funds and similar).
-Today is {TODAY}. Search the web for the LATEST news from the past 7 days about:- Green bonds, sustainability-linked bonds, social bonds- ESG equity investing and fund flows- Climate finance and carbon markets- Sustainable investment policy (EU taxonomy, SFDR, ASIC, APRA, SEC ESG rules)- Impact investing developments- Emerging market sustainable finance- Corporate sustainability disclosures (TCFD, ISSB, CSRD)- Notable ESG fund launches or closures
-Return a JSON object ONLY (no markdown, no backticks) with this exact structure:
-{{
-  "lede": "A compelling 2-sentence editorial overview of the week's key sustainable investment themes",
-  "stories": [
-    {{
-      "headline": "Punchy newspaper-style headline (max 12 words)",
-      "category": "One of: Climate, Green Bonds, Policy, ESG Equity, Reporting, Emerging Markets, Other",
-      "summary": "3-4 sentence summary with specific details, numbers, and context relevant to institutional investors",
-      "source": "Publication name",
-      "url": "Direct URL to the article",
-      "date": "Approximate date e.g. Mar 10"
-    }}
-  ],
-  "themes": [
-    "Theme 1: one-sentence insight",
-    "Theme 2: ...",
-    "Theme 3: ...",
-    "Theme 4: ...",
-    "Theme 5: ..."
-  ]
-}}
-Include 7-10 stories. Be specific - real figures, real fund names, real policy names. \
-Do not fabricate news. Return JSON only."""
-def generate():
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    print(f"Generating brief for {TODAY}...")
-    response = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=4000,
-        tools=[{"type": "web_search_20250305", "name": "web_search"}],
-        messages=[{"role": "user", "content": PROMPT}],
-    )
-    # Extract the last text block
-    text_blocks = [b for b in response.content if b.type == "text"]
-    if not text_blocks:
-        raise ValueError("No text block in response")
-    raw = text_blocks[-1].text
-    # Strip any accidental markdown fences
-    clean = re.sub(r"```json|```", "", raw).strip()
-    match = re.search(r"\{[\s\S]*\}", clean)
-    if not match:
-        raise ValueError(f"No JSON object found in response:\n{raw[:500]}")
-    brief = json.loads(match.group(0))
-    # Attach metadata
-    brief["_date"] = TODAY
-    brief["_weekLabel"] = WEEK_LABEL
-    # 
-── WRITE FILES ─────────────────────────────────────────────────────────
-    os.makedirs("data", exist_ok=True)
-    # Latest (always overwritten — what the site reads)
-    with open("data/latest.json", "w", encoding="utf-8") as f:
-        json.dump(brief, f, ensure_ascii=False, indent=2)
-    print("Written: data/latest.json")
-    # Archive copy keyed by date
-    archive_path = f"data/{TODAY}.json"
-    with open(archive_path, "w", encoding="utf-8") as f:
-        json.dump(brief, f, ensure_ascii=False, indent=2)
-    print(f"Written: {archive_path}")
-    # Archive index — list of all past editions for the dropdown
-    index_path = "data/index.json"
-    if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
-            index = json.load(f)
-    else:
-        index = []
-    # Add today if not already present
-    entry = {"date": TODAY, "label": WEEK_LABEL, "file": f"{TODAY}.json"}
-    if not any(e["date"] == TODAY for e in index):
-        index.insert(0, entry)  # newest first
-    with open(index_path, "w", encoding="utf-8") as f:
-        json.dump(index, f, ensure_ascii=False, indent=2)
-    print(f"Written: {index_path} ({len(index)} editions)")
-    print("Done.")
-if __name__ == "__main__":
-    generate()
+name: Generate Weekly Brief
+on:
+schedule:
+# Every Monday at 7:00am AEST (Sunday 21:00 UTC)
+- cron: '0 21 * * 0'
+workflow_dispatch: # Allow manual trigger from GitHub UI
+jobs:
+generate:
+runs-on: ubuntu-latest
+steps:
+- name: Checkout repo
+uses: actions/checkout@v4
+- name: Set up Python
+uses: actions/setup-python@v5
+with:
+python-version: '3.11'
+- name: Install dependencies
+run: pip install anthropic
+- name: Generate brief
+env:
+ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+run: python scripts/generate_brief.py
+- name: Commit and push
+run: |
+git config user.name "Impactvest Bot"
+git config user.email "bot@impactvest.com"
+git add data/
+git diff --staged --quiet || git commit -m "Weekly brief $(date -u +%Y-
+%m-%d)"
+git push
